@@ -1,8 +1,3 @@
-> ⚠️ **INFO: This repository is deprecated**
-> 
-> The source code for the `ITensorGaussianMPS` package has been moved into the monorepo at [ITensors.jl](https://github.com/ITensor/ITensors.jl).
-> Please refer to that repository for the latest changes.
-
 # ITensorGaussianMPS
 
 |**Citation**                                                                     |**Open-access preprint**                               |
@@ -26,6 +21,7 @@ This can help create starting states for DMRG. For example:
 ```julia
 using ITensors
 using ITensorGaussianMPS
+using LinearAlgebra
 
 # Half filling
 N = 20
@@ -51,15 +47,15 @@ s = siteinds("Fermion", N; conserve_qns = true)
 U = 1.0
 @show U
 
-ampo = AutoMPO()
+os = OpSum()
 for b in 1:N-1
-  ampo .+= -t,"Cdag",b,"C",b+1
-  ampo .+= -t,"Cdag",b+1,"C",b
+  os .+= -t,"Cdag",b,"C",b+1
+  os .+= -t,"Cdag",b+1,"C",b
 end
 for b in 1:N
-  ampo .+= U, "Cdag*C", b
+  os .+= U, "Cdag*C", b
 end
-H = MPO(ampo, s)
+H = MPO(os, s)
 
 println("\nFree fermion starting energy")
 @show inner(ψ0, H, ψ0)
@@ -72,14 +68,14 @@ println("\nRandom state starting energy")
 
 println("\nRun dmrg with random starting state")
 sweeps = Sweeps(10)
-maxdim!(sweeps,10,20,40,60)
-cutoff!(sweeps,1E-12)
+setmaxdim!(sweeps,10,20,40,60)
+setcutoff!(sweeps,1E-12)
 @time dmrg(H, ψr, sweeps)
 
 println("\nRun dmrg with free fermion starting state")
 sweeps = Sweeps(4)
-maxdim!(sweeps,60)
-cutoff!(sweeps,1E-12)
+setmaxdim!(sweeps,60)
+setcutoff!(sweeps,1E-12)
 @time dmrg(H, ψ0, sweeps)
 ```
 This will output something like:

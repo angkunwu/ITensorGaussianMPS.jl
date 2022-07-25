@@ -1,6 +1,6 @@
+using ITensors
 using ITensorGaussianMPS
 using LinearAlgebra
-using ITensors
 
 # Electrons
 
@@ -31,22 +31,22 @@ U = 4.0
 lattice = square_lattice(Nx, Ny; yperiodic=true)
 
 # Make the free fermion Hamiltonian for the up spins
-ampo_up = AutoMPO()
+os_up = OpSum()
 for b in lattice
-  ampo_up .+= -t, "Cdagup", b.s1, "Cup", b.s2
-  ampo_up .+= -t, "Cdagup", b.s2, "Cup", b.s1
+  os_up .+= -t, "Cdagup", b.s1, "Cup", b.s2
+  os_up .+= -t, "Cdagup", b.s2, "Cup", b.s1
 end
 
 # Make the free fermion Hamiltonian for the down spins
-ampo_dn = AutoMPO()
+os_dn = OpSum()
 for b in lattice
-  ampo_dn .+= -t, "Cdagdn", b.s1, "Cdn", b.s2
-  ampo_dn .+= -t, "Cdagdn", b.s2, "Cdn", b.s1
+  os_dn .+= -t, "Cdagdn", b.s1, "Cdn", b.s2
+  os_dn .+= -t, "Cdagdn", b.s2, "Cdn", b.s1
 end
 
 # Hopping Hamiltonian with 2*N spinless fermions,
 # alternating up and down spins
-h = hopping_hamiltonian(ampo_up, ampo_dn)
+h = hopping_hamiltonian(os_up, os_dn)
 
 # Get the Slater determinant
 Φ = slater_determinant_matrix(h, Nf)
@@ -64,11 +64,11 @@ println("Making free fermion starting MPS")
 )
 @show maxlinkdim(ψ0)
 
-ampo = ampo_up + ampo_dn
+os = os_up + os_dn
 for n in 1:N
-  ampo .+= U, "Nupdn", n
+  os .+= U, "Nupdn", n
 end
-H = MPO(ampo, s)
+H = MPO(os, s)
 
 # Random starting state
 ψr = randomMPS(s, n -> n ≤ Nf ? (isodd(n) ? "↑" : "↓") : "0")
@@ -83,15 +83,15 @@ println("\nFree fermion MPS starting state energy")
 
 println("\nStart from random product state")
 sweeps = Sweeps(10)
-maxdim!(sweeps, 10, 20, 100, 200, _maxlinkdim)
-cutoff!(sweeps, _cutoff)
-noise!(sweeps, 1e-7, 1e-8, 1e-10, 0.0)
+setmaxdim!(sweeps, 10, 20, 100, 200, _maxlinkdim)
+setcutoff!(sweeps, _cutoff)
+setnoise!(sweeps, 1e-7, 1e-8, 1e-10, 0.0)
 @time dmrg(H, ψr, sweeps)
 
 println("\nStart from free fermion state")
 sweeps = Sweeps(10)
-maxdim!(sweeps, _maxlinkdim)
-cutoff!(sweeps, _cutoff)
+setmaxdim!(sweeps, _maxlinkdim)
+setcutoff!(sweeps, _cutoff)
 @time dmrg(H, ψ0, sweeps)
 
 nothing

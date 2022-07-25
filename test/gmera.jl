@@ -30,8 +30,8 @@ end
   @test h * Φ ≈ Φ * Diagonal(e[1:Nf])
 
   # Diagonalize the correlation matrix as a
-  # Gaussian MPS (GMPS)
-  n, gmps = slater_determinant_to_gmps(Φ; maxblocksize=4)
+  # Gaussian MPS (GMPS) gates
+  n, gmps = slater_determinant_to_gmera(Φ; maxblocksize=10)
 
   ns = round.(Int, n)
   @test sum(ns) == Nf
@@ -42,7 +42,7 @@ end
 
   # Form the MPS
   s = siteinds("Fermion", N; conserve_qns=true)
-  ψ = slater_determinant_to_mps(s, Φ; blocksize=4)
+  ψ = ITensorGaussianMPS.slater_determinant_to_mera(s, Φ; blocksize=4)
 
   os = OpSum()
   for i in 1:N, j in 1:N
@@ -88,7 +88,7 @@ end
 
   # Diagonalize the correlation matrix as a
   # Gaussian MPS (GMPS)
-  n, gmps = slater_determinant_to_gmps(Φ; maxblocksize=4)
+  n, gmps = slater_determinant_to_gmera(Φ; maxblocksize=4)
 
   ns = round.(Int, n)
   @test sum(ns) == Nf
@@ -99,7 +99,7 @@ end
 
   # Form the MPS
   s = siteinds("Fermion", N; conserve_qns=true)
-  ψ = slater_determinant_to_mps(s, Φ; blocksize=4)
+  ψ = ITensorGaussianMPS.slater_determinant_to_mera(s, Φ; blocksize=4)
 
   os = OpSum()
   for i in 1:N, j in 1:N
@@ -122,4 +122,55 @@ end
   @test abs(inner(ψ, ψ̃)) ≈ 1 rtol = 1e-5
   @test inner(ψ̃', H, ψ̃) ≈ inner(ψ', H, ψ) rtol = 1e-5
   @test E ≈ energy
+end
+
+# Build 1-d SSH model
+function SSH1dModel(N::Int, t::Float64, vardelta::Float64)
+  # N should be even
+  s = siteinds("Fermion", N; conserve_qns=true)
+  limit = div(N - 1, 2)
+  t1 = -t * (1 + vardelta / 2)
+  t2 = -t * (1 - vardelta / 2)
+  os = OpSum()
+  for n in 1:limit
+    os .+= t1, "Cdag", 2 * n - 1, "C", 2 * n
+    os .+= t1, "Cdag", 2 * n, "C", 2 * n - 1
+    os .+= t2, "Cdag", 2 * n, "C", 2 * n + 1
+    os .+= t2, "Cdag", 2 * n + 1, "C", 2 * n
+  end
+  if N % 2 == 0
+    os .+= t1, "Cdag", N - 1, "C", N
+    os .+= t1, "Cdag", N, "C", N - 1
+  end
+  h = hopping_hamiltonian(os)
+  H = MPO(os, s)
+  #display(t1)
+  return (h, H, s)
+end
+
+@testset "Energy" begin
+  N = 2^4
+  Nf = div(N, 2)
+  t = 1.0
+  gapsize = 0
+  vardelta = gapsize / 2
+  h, H, s = SSH1dModel(N, t, vardelta)
+
+  Φ = slater_determinant_matrix(h, Nf)
+  E, V = eigen(h)
+  sort(E)
+  Eana = sum(E[1:Nf])
+
+  Λ0 = Φ * Φ'
+  @test Eana ≈ tr(h * Λ0) rtol = 1e-5
+  # Diagonalize the correlation matrix as a
+  # Gaussian MPS (GMPS) and GMERA
+  ngmps, V1 = ITensorGaussianMPS.correlation_matrix_to_gmps(Λ0; eigval_cutoff=1e-8)
+  nmera, V1 = ITensorGaussianMPS.correlation_matrix_to_gmera(Λ0; eigval_cutoff=1e-8)#,maxblocksize=6)
+  @test sum(round.(Int, nmera)) == sum(round.(Int, ngmps))
+
+  U = ITensorGaussianMPS.UmatFromGates(V1, N)
+  Etest = ITensorGaussianMPS.EfromGates(h, U)
+
+  @test Eana ≈ Etest rtol = 1e-5
 end

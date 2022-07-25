@@ -48,22 +48,22 @@ end
   U = 1.0
 
   # Make the free fermion Hamiltonian for the up spins
-  ampo_up = AutoMPO()
+  os_up = OpSum()
   for n in 1:(N - 1)
-    ampo_up .+= -t, "Cdagup", n, "Cup", n + 1
-    ampo_up .+= -t, "Cdagup", n + 1, "Cup", n
+    os_up .+= -t, "Cdagup", n, "Cup", n + 1
+    os_up .+= -t, "Cdagup", n + 1, "Cup", n
   end
 
   # Make the free fermion Hamiltonian for the down spins
-  ampo_dn = AutoMPO()
+  os_dn = OpSum()
   for n in 1:(N - 1)
-    ampo_dn .+= -t, "Cdagdn", n, "Cdn", n + 1
-    ampo_dn .+= -t, "Cdagdn", n + 1, "Cdn", n
+    os_dn .+= -t, "Cdagdn", n, "Cdn", n + 1
+    os_dn .+= -t, "Cdagdn", n + 1, "Cdn", n
   end
 
   # Hopping Hamiltonians for the up and down spins
-  h_up = hopping_hamiltonian(ampo_up)
-  h_dn = hopping_hamiltonian(ampo_dn)
+  h_up = hopping_hamiltonian(os_up)
+  h_dn = hopping_hamiltonian(os_dn)
 
   # Get the Slater determinant
   Φ_up = slater_determinant_matrix(h_up, Nf_up)
@@ -77,30 +77,30 @@ end
   @test maxlinkdim(ψ0) ≤ _maxlinkdim
 
   # The total non-interacting part of the Hamiltonian
-  ampo_noninteracting = AutoMPO()
+  os_noninteracting = OpSum()
   for n in 1:(N - 1)
-    ampo_noninteracting .+= -t, "Cdagup", n, "Cup", n + 1
-    ampo_noninteracting .+= -t, "Cdagdn", n, "Cdn", n + 1
-    ampo_noninteracting .+= -t, "Cdagup", n + 1, "Cup", n
-    ampo_noninteracting .+= -t, "Cdagdn", n + 1, "Cdn", n
+    os_noninteracting .+= -t, "Cdagup", n, "Cup", n + 1
+    os_noninteracting .+= -t, "Cdagdn", n, "Cdn", n + 1
+    os_noninteracting .+= -t, "Cdagup", n + 1, "Cup", n
+    os_noninteracting .+= -t, "Cdagdn", n + 1, "Cdn", n
   end
 
-  H_noninteracting = MPO(ampo_noninteracting, s)
-  @test tr(Φ_up' * h_up * Φ_up) + tr(Φ_dn' * h_dn * Φ_dn) ≈ inner(ψ0, H_noninteracting, ψ0) rtol =
+  H_noninteracting = MPO(os_noninteracting, s)
+  @test tr(Φ_up' * h_up * Φ_up) + tr(Φ_dn' * h_dn * Φ_dn) ≈ inner(ψ0', H_noninteracting, ψ0) rtol =
     1e-3
 
   # The total interacting Hamiltonian
-  ampo_interacting = AutoMPO()
+  os_interacting = OpSum()
   for n in 1:(N - 1)
-    ampo_interacting .+= -t, "Cdagup", n, "Cup", n + 1
-    ampo_interacting .+= -t, "Cdagdn", n, "Cdn", n + 1
-    ampo_interacting .+= -t, "Cdagup", n + 1, "Cup", n
-    ampo_interacting .+= -t, "Cdagdn", n + 1, "Cdn", n
+    os_interacting .+= -t, "Cdagup", n, "Cup", n + 1
+    os_interacting .+= -t, "Cdagdn", n, "Cdn", n + 1
+    os_interacting .+= -t, "Cdagup", n + 1, "Cup", n
+    os_interacting .+= -t, "Cdagdn", n + 1, "Cdn", n
   end
   for n in 1:N
-    ampo_interacting .+= U, "Nupdn", n
+    os_interacting .+= U, "Nupdn", n
   end
-  H = MPO(ampo_interacting, s)
+  H = MPO(os_interacting, s)
 
   # Random starting state
   ψr = randomMPS(s, n -> n ≤ Nf ? (isodd(n) ? "↑" : "↓") : "0")
@@ -108,46 +108,46 @@ end
   @test flux(ψr) == QN(("Nf", Nf, -1), ("Sz", 0))
   @test flux(ψ0) == QN(("Nf", Nf, -1), ("Sz", 0))
 
-  @test inner(ψ0, H, ψ0) < inner(ψr, H, ψr)
+  @test inner(ψ0', H, ψ0) < inner(ψr', H, ψr)
 
   sweeps = Sweeps(3)
-  maxdim!(sweeps, 10, 20, _maxlinkdim)
-  cutoff!(sweeps, _cutoff)
-  noise!(sweeps, 1e-5, 1e-6, 1e-7, 0.0)
+  setmaxdim!(sweeps, 10, 20, _maxlinkdim)
+  setcutoff!(sweeps, _cutoff)
+  setnoise!(sweeps, 1e-5, 1e-6, 1e-7, 0.0)
   er, _ = dmrg(H, ψr, sweeps; outputlevel=0)
 
   sweeps = Sweeps(3)
-  maxdim!(sweeps, _maxlinkdim)
-  cutoff!(sweeps, _cutoff)
-  noise!(sweeps, 1e-5, 1e-6, 1e-7, 0.0)
+  setmaxdim!(sweeps, _maxlinkdim)
+  setcutoff!(sweeps, _cutoff)
+  setnoise!(sweeps, 1e-5, 1e-6, 1e-7, 0.0)
   e0, _ = dmrg(H, ψ0, sweeps; outputlevel=0)
 
-  @test e0 > inner(ψ0, H_noninteracting, ψ0)
+  @test e0 > inner(ψ0', H_noninteracting, ψ0)
   @test e0 < er
 end
 
 @testset "Regression test for bug away from half filling" begin
   N = 3
   t = 1.0
-  ampo_up = AutoMPO()
+  os_up = OpSum()
   for n in 1:(N - 1)
-    ampo_up .+= -t, "Cdagup", n, "Cup", n + 1
-    ampo_up .+= -t, "Cdagup", n + 1, "Cup", n
+    os_up .+= -t, "Cdagup", n, "Cup", n + 1
+    os_up .+= -t, "Cdagup", n + 1, "Cup", n
   end
-  ampo_dn = AutoMPO()
+  os_dn = OpSum()
   for n in 1:(N - 1)
-    ampo_dn .+= -t, "Cdagdn", n, "Cdn", n + 1
-    ampo_dn .+= -t, "Cdagdn", n + 1, "Cdn", n
+    os_dn .+= -t, "Cdagdn", n, "Cdn", n + 1
+    os_dn .+= -t, "Cdagdn", n + 1, "Cdn", n
   end
-  h_up = hopping_hamiltonian(ampo_up)
-  h_dn = hopping_hamiltonian(ampo_dn)
+  h_up = hopping_hamiltonian(os_up)
+  h_dn = hopping_hamiltonian(os_dn)
   s = siteinds("Electron", N; conserve_qns=true)
-  H = MPO(ampo_up + ampo_dn, s)
+  H = MPO(os_up + os_dn, s)
   Nf_up, Nf_dn = 1, 0
   Φ_up = slater_determinant_matrix(h_up, Nf_up)
   Φ_dn = slater_determinant_matrix(h_dn, Nf_dn)
   ψ = slater_determinant_to_mps(s, Φ_up, Φ_dn; eigval_cutoff=0.0, cutoff=0.0)
-  @test inner(ψ, H, ψ) ≈ tr(Φ_up'h_up * Φ_up) + tr(Φ_dn'h_dn * Φ_dn)
+  @test inner(ψ', H, ψ) ≈ tr(Φ_up'h_up * Φ_up) + tr(Φ_dn'h_dn * Φ_dn)
   @test maxlinkdim(ψ) == 2
   @test flux(ψ) == QN(("Nf", 1, -1), ("Sz", 1))
   ns_up = expect_compat(ψ, "Nup")
