@@ -186,7 +186,6 @@ function givens_rotations(v::AbstractVector{ElT}) where {ElT}
   end
   return gs, r
 end
-
 """
     correlation_matrix_to_gmps(Λ::AbstractMatrix{ElT}; eigval_cutoff::Float64 = 1e-8, maxblocksize::Int = size(Λ0, 1))
 
@@ -227,7 +226,11 @@ function correlation_matrix_to_gmps(
     # In-place version of:
     # V = g * V
     lmul!(g, V)
-    Λ = Hermitian(g * Λ * g')
+    #Λ = Hermitian(g * Λ * g')
+    for rot in g.rotations
+	    Λ = rot * Λ * rot'
+    end
+    #@show Λ
   end
   return ns, V
 end
